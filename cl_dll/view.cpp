@@ -402,6 +402,16 @@ typedef struct
 	int CurrentAngle;
 } viewinterp_t;
 
+// ---- Aim down sights (ADS) ----
+// Hold the +ads key to move the viewmodel toward the center of the screen.
+// Tune live from the console: ads_x (left/right), ads_y (forward/back), ads_z (up/down).
+static cvar_t *ads_x, *ads_y, *ads_z, *ads_speed, *ads_bob;
+static int g_ads_held = 0;
+static float g_ads_frac = 0.0f; // 0 = hip, 1 = fully aimed
+
+static void IN_AdsDown( void ) { g_ads_held = 1; }
+static void IN_AdsUp( void ) { g_ads_held = 0; }
+
 /*
 ==================
 V_CalcRefdef
@@ -438,6 +448,28 @@ void V_CalcNormalRefdef( struct ref_params_s *pparams )
 	// transform the view offset by the model's matrix to get the offset from
 	// model origin for the view
 	bob = V_CalcBob( pparams );
+
+	// aim down sights: ease toward 1 while held, back to 0 when released
+	{
+		float target = ( g_ads_held && pparams->health > 0 && !CL_IsThirdPerson() && !gEngfuncs.IsSpectateOnly() ) ? 1.0f : 0.0f;
+		float step = ads_speed->value * pparams->frametime;
+
+		if( g_ads_frac < target )
+		{
+			g_ads_frac += step;
+			if( g_ads_frac > target )
+				g_ads_frac = target;
+		}
+		else if( g_ads_frac > target )
+		{
+			g_ads_frac -= step;
+			if( g_ads_frac < target )
+				g_ads_frac = target;
+		}
+
+		// less gun sway while aiming
+		bob *= 1.0f - g_ads_frac * ( 1.0f - ads_bob->value );
+	}
 
 	// refresh position
 	VectorCopy( pparams->simorg, pparams->vieworg );
@@ -623,6 +655,19 @@ void V_CalcNormalRefdef( struct ref_params_s *pparams )
 	else if( pparams->viewsize == 80.0f )
 	{
 		view->origin[2] += 0.5f;
+	}
+
+	// aim down sights: shift the viewmodel (smoothstep for a nicer ease)
+	if( g_ads_frac > 0.0f )
+	{
+		float t = g_ads_frac * g_ads_frac * ( 3.0f - 2.0f * g_ads_frac );
+
+		for( i = 0; i < 3; i++ )
+		{
+			view->origin[i] += t * ( ads_x->value * pparams->right[i]
+				+ ads_y->value * pparams->forward[i]
+				+ ads_z->value * pparams->up[i] );
+		}
 	}
 
 	// Add in the punchangle, if any
@@ -1615,6 +1660,15 @@ void V_Init( void )
 	cl_bobup = gEngfuncs.pfnRegisterVariable( "cl_bobup","0.5", 0 );
 	cl_waterdist = gEngfuncs.pfnRegisterVariable( "cl_waterdist","4", 0 );
 	cl_chasedist = gEngfuncs.pfnRegisterVariable( "cl_chasedist","112", 0 );
+
+	// aim down sights (default offsets are a first guess; tune them in-game)
+	ads_x = gEngfuncs.pfnRegisterVariable( "ads_x", "-3.0", FCVAR_ARCHIVE );
+	ads_y = gEngfuncs.pfnRegisterVariable( "ads_y", "2.0", FCVAR_ARCHIVE );
+	ads_z = gEngfuncs.pfnRegisterVariable( "ads_z", "1.5", FCVAR_ARCHIVE );
+	ads_speed = gEngfuncs.pfnRegisterVariable( "ads_speed", "6.0", FCVAR_ARCHIVE );
+	ads_bob = gEngfuncs.pfnRegisterVariable( "ads_bob", "0.2", FCVAR_ARCHIVE );
+	gEngfuncs.pfnAddCommand( "+ads", IN_AdsDown );
+	gEngfuncs.pfnAddCommand( "-ads", IN_AdsUp );
 }
 
 //#define TRACE_TEST	1
