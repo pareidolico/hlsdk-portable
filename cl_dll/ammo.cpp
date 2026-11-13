@@ -37,6 +37,9 @@ client_sprite_t *GetSpriteList(client_sprite_t *pList, const char *psz, int iRes
 
 WeaponsResource gWR;
 
+// id of the weapon the player is holding (0 = none); used by aim down sights
+int g_iActiveWeaponId = 0;
+
 int g_weaponselect = 0;
 
 void WeaponsResource::LoadAllWeaponSprites( void )
@@ -580,6 +583,7 @@ int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 		SetCrosshair( 0, nullrc, 0, 0, 0 );
 		// Clear out the weapon so we don't keep drawing the last active weapon's ammo. - Solokiller
 		m_pWeapon = 0;
+		g_iActiveWeaponId = 0;
 		return 0;
 	}
 
@@ -590,6 +594,7 @@ int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 		{
 			gHUD.m_fPlayerDead = TRUE;
 			gpActiveSel = NULL;
+			g_iActiveWeaponId = 0;
 			return 1;
 		}
 		gHUD.m_fPlayerDead = FALSE;
@@ -609,6 +614,7 @@ int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 		return 1;
 
 	m_pWeapon = pWeapon;
+	g_iActiveWeaponId = iId;
 
 	if( !( gHUD.m_iHideHUDDisplay & ( HIDEHUD_WEAPONS | HIDEHUD_ALL ) ) )
 	{

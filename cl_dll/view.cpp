@@ -26,6 +26,7 @@
 #include "shake.h"
 #include "hltv.h"
 #include "view.h"
+#include "kbutton.h"
 
 // Spectator Mode
 extern "C" 
@@ -403,14 +404,51 @@ typedef struct
 } viewinterp_t;
 
 // ---- Aim down sights (ADS) ----
-// Hold the +ads key to move the viewmodel toward the center of the screen.
-// Tune live from the console: ads_x (left/right), ads_y (forward/back), ads_z (up/down).
+// Hold +ads to bring the gun to the center of the screen.
+// Each firearm has its own sight position in g_AdsWeapons below. While tuning, the
+// ads_x / ads_y / ads_z console variables add a live "trim" on top of the held weapon's values.
+extern kbutton_t in_ads;
+extern int g_iActiveWeaponId;
+
+typedef struct
+{
+	int id;       // WEAPON_* id from weapons.h
+	float x;      // + right
+	float y;      // + forward
+	float z;      // + up
+} adsweapon_t;
+
+// Only weapons listed here can aim down sights. Offsets are first guesses (all the same):
+// tune each one in-game with ads_x/ads_y/ads_z, then write the final numbers here.
+static const adsweapon_t g_AdsWeapons[] =
+{
+	{ 2, -3.0f, 2.0f, 1.5f },  // WEAPON_GLOCK (9mm pistol)
+	{ 3, -3.0f, 2.0f, 1.5f },  // WEAPON_PYTHON (.357)
+	{ 4, -3.0f, 2.0f, 1.5f },  // WEAPON_MP5
+	{ 6, -3.0f, 2.0f, 1.5f },  // WEAPON_CROSSBOW
+	{ 7, -3.0f, 2.0f, 1.5f },  // WEAPON_SHOTGUN
+};
+
 static cvar_t *ads_x, *ads_y, *ads_z, *ads_speed, *ads_bob;
-static int g_ads_held = 0;
 static float g_ads_frac = 0.0f; // 0 = hip, 1 = fully aimed
 
-static void IN_AdsDown( void ) { g_ads_held = 1; }
-static void IN_AdsUp( void ) { g_ads_held = 0; }
+static const adsweapon_t *V_AdsFindWeapon( void )
+{
+	int i;
+
+	for( i = 0; i < (int)( sizeof( g_AdsWeapons ) / sizeof( g_AdsWeapons[0] ) ); i++ )
+	{
+		if( g_AdsWeapons[i].id == g_iActiveWeaponId )
+			return &g_AdsWeapons[i];
+	}
+	return NULL;
+}
+
+// also used by input.cpp: ADS only works with the listed firearms
+int V_AdsWeaponAllowed( void )
+{
+	return V_AdsFindWeapon() != NULL;
+}
 
 /*
 ==================
@@ -451,7 +489,7 @@ void V_CalcNormalRefdef( struct ref_params_s *pparams )
 
 	// aim down sights: ease toward 1 while held, back to 0 when released
 	{
-		float target = ( g_ads_held && pparams->health > 0 && !CL_IsThirdPerson() && !gEngfuncs.IsSpectateOnly() ) ? 1.0f : 0.0f;
+		float target = ( ( in_ads.state & 1 ) && V_AdsFindWeapon() && pparams->health > 0 && !CL_IsThirdPerson() && !gEngfuncs.IsSpectateOnly() ) ? 1.0f : 0.0f;
 		float step = ads_speed->value * pparams->frametime;
 
 		if( g_ads_frac < target )
@@ -661,12 +699,19 @@ void V_CalcNormalRefdef( struct ref_params_s *pparams )
 	if( g_ads_frac > 0.0f )
 	{
 		float t = g_ads_frac * g_ads_frac * ( 3.0f - 2.0f * g_ads_frac );
+		const adsweapon_t *pw = V_AdsFindWeapon();
+		adsweapon_t adsw = { 0, 0.0f, 0.0f, 0.0f };
+
+		if( pw )
+			adsw = *pw;
+		else
+			adsw = g_AdsWeapons[0]; // weapon just changed: keep easing out from a sane position
 
 		for( i = 0; i < 3; i++ )
 		{
-			view->origin[i] += t * ( ads_x->value * pparams->right[i]
-				+ ads_y->value * pparams->forward[i]
-				+ ads_z->value * pparams->up[i] );
+			view->origin[i] += t * ( ( adsw.x + ads_x->value ) * pparams->right[i]
+				+ ( adsw.y + ads_y->value ) * pparams->forward[i]
+				+ ( adsw.z + ads_z->value ) * pparams->up[i] );
 		}
 	}
 
@@ -1661,14 +1706,12 @@ void V_Init( void )
 	cl_waterdist = gEngfuncs.pfnRegisterVariable( "cl_waterdist","4", 0 );
 	cl_chasedist = gEngfuncs.pfnRegisterVariable( "cl_chasedist","112", 0 );
 
-	// aim down sights (default offsets are a first guess; tune them in-game)
-	ads_x = gEngfuncs.pfnRegisterVariable( "ads_x", "-3.0", FCVAR_ARCHIVE );
-	ads_y = gEngfuncs.pfnRegisterVariable( "ads_y", "2.0", FCVAR_ARCHIVE );
-	ads_z = gEngfuncs.pfnRegisterVariable( "ads_z", "1.5", FCVAR_ARCHIVE );
+	// aim down sights: x/y/z are a live trim added to the held weapon's table values (0 = no change)
+	ads_x = gEngfuncs.pfnRegisterVariable( "ads_x", "0", 0 );
+	ads_y = gEngfuncs.pfnRegisterVariable( "ads_y", "0", 0 );
+	ads_z = gEngfuncs.pfnRegisterVariable( "ads_z", "0", 0 );
 	ads_speed = gEngfuncs.pfnRegisterVariable( "ads_speed", "6.0", FCVAR_ARCHIVE );
 	ads_bob = gEngfuncs.pfnRegisterVariable( "ads_bob", "0.2", FCVAR_ARCHIVE );
-	gEngfuncs.pfnAddCommand( "+ads", IN_AdsDown );
-	gEngfuncs.pfnAddCommand( "-ads", IN_AdsUp );
 }
 
 //#define TRACE_TEST	1

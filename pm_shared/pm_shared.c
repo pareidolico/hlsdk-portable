@@ -2929,6 +2929,12 @@ void PM_CheckParamters( void )
 		pmove->maxspeed *= 1.0f / 3.0f;
 	}
 
+	// aim down sights (IN_ALT1 is only sent while aiming with a firearm): half speed
+	if( pmove->cmd.buttons & IN_ALT1 )
+	{
+		pmove->maxspeed *= 0.5f;
+	}
+
 	if( ( spd != 0.0f ) && ( spd > pmove->maxspeed ) )
 	{
 		float fRatio = pmove->maxspeed / spd;

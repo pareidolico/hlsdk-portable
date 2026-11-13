@@ -121,6 +121,7 @@ kbutton_t	in_down;
 kbutton_t	in_duck;
 kbutton_t	in_reload;
 kbutton_t	in_alt1;
+kbutton_t	in_ads;
 kbutton_t	in_score;
 kbutton_t	in_break;
 kbutton_t	in_graph;  // Display the netgraph
@@ -603,6 +604,18 @@ void IN_ReloadUp( void )
 	KeyUp( &in_reload );
 }
 
+int V_AdsWeaponAllowed( void );
+
+void IN_AdsDown( void )
+{
+	KeyDown( &in_ads );
+}
+
+void IN_AdsUp( void )
+{
+	KeyUp( &in_ads );
+}
+
 void IN_Alt1Down( void )
 {
 	KeyDown( &in_alt1 );
@@ -991,6 +1004,12 @@ int CL_ButtonBits( int bResetState )
 		bits |= IN_ALT1;
 	}
 
+	// aim down sights: tell the server (IN_ALT1) so movement slows identically on both sides
+	if( ( in_ads.state & 3 ) && V_AdsWeaponAllowed() )
+	{
+		bits |= IN_ALT1;
+	}
+
 	if( in_score.state & 3 )
 	{
 		bits |= IN_SCORE;
@@ -1017,6 +1036,7 @@ int CL_ButtonBits( int bResetState )
 		in_attack2.state &= ~2;
 		in_reload.state &= ~2;
 		in_alt1.state &= ~2;
+		in_ads.state &= ~2;
 		in_score.state &= ~2;
 	}
 
@@ -1101,6 +1121,8 @@ void InitInput( void )
 	gEngfuncs.pfnAddCommand( "-reload", IN_ReloadUp );
 	gEngfuncs.pfnAddCommand( "+alt1", IN_Alt1Down );
 	gEngfuncs.pfnAddCommand( "-alt1", IN_Alt1Up );
+	gEngfuncs.pfnAddCommand( "+ads", IN_AdsDown );
+	gEngfuncs.pfnAddCommand( "-ads", IN_AdsUp );
 	gEngfuncs.pfnAddCommand( "+score", IN_ScoreDown );
 	gEngfuncs.pfnAddCommand( "-score", IN_ScoreUp );
 	gEngfuncs.pfnAddCommand( "+showscores", IN_ScoreDown );
